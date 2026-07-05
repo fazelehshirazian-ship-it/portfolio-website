@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UGC Portfolio - فاظله‌ای شیرازیان</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <style>
+        * { direction: rtl; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .fade-in { animation: fadeIn 0.3s; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .drag-handle { cursor: move; }
+        .sortable-ghost { opacity: 0.5; }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
+    <div id="app"></div>
+
+    <script>
+        // ============ Data Management ============
+        const defaultData = {
+            site: {
+                siteName: 'فاظله‌ای شیرازیان',
+                tagline: 'مهندسی پزشکی و سیستم‌های میکرو',
+                logo: null,
+                email: 'fazelehshirazian@gmail.com',
+                phone: '017631120465',
+                location: 'دارمشتات، آلمان',
+                adminPassword: 'admin123'
+            },
+            sections: [
+                {
+                    id: 1,
+                    type: 'hero',
+                    title: 'خوش‌آمدید',
+                    description: 'من یک دانشجوی کارشناسی ارشد مهندسی پزشکی هستم',
+                    image: null,
+                    order: 1
+                },
+                {
+                    id: 2,
+                    type: 'about',
+                    title: 'درباره من',
+                    content: 'تجربه عملی در سیستم‌های میکروفلویدیک و تحقیقات...',
+                    order: 2
+                },
+                {
+                    id: 3,
+                    type: 'projects',
+                    title: 'پروژه‌ها',
+                    items: [
+                        {
+                            id: 101,
+                            title: 'تشخیص احساسات با AI',
+                            description: 'استفاده از Computer Vision',
+                            image: null,
+                            tags: ['AI', 'Python']
+                        }
+                    ],
+                    order: 3
+                },
+                {
+                    id: 4,
+                    type: 'gallery',
+                    title: 'گالری',
+                    items: [],
+                    order: 4
+                },
+                {
+                    id: 5,
+                    type: 'skills',
+                    title: 'مهارت‌ها',
+                    items: ['SolidWorks', 'Python', 'MATLAB', 'Machine Learning'],
+                    order: 5
+                },
+                {
+                    id: 6,
+                    type: 'contact',
+                    title: 'تماس با من',
+                    description: 'برای پروژه‌ها یا سؤالات',
+                    order: 6
+                }
+            ]
+        };
+
+        let siteData = JSON.parse(localStorage.getItem('ugcPortfolio')) || defaultData;
+        let isLoggedIn = false;
+        let currentEditingSection = null;
+
+        function saveData() {
+            localStorage.setItem('ugcPortfolio', JSON.stringify(siteData));
+        }
+
+        // ============ Admin Functions ============
+        function loginAdmin() {
+            const password = document.getElementById('adminPassword')?.value;
+            if (password === siteData.site.adminPassword) {
+                isLoggedIn = true;
+                renderApp();
+            } else {
+                alert('رمز غلط!');
+            }
+        }
+
+        function logoutAdmin() {
+            isLoggedIn = false;
+            currentEditingSection = null;
+            renderApp();
+        }
+
+        function updateSiteInfo(field, value) {
+            siteData.site[field] = value;
+            saveData();
+        }
+
+        function addSection(type) {
+            const newId = Math.max(...siteData.sections.map(s => s.id), 0) + 1;
+            const newSection = {
+                id: newId,
+                type: type,
+                title: 'بخش جدید',
+                description: '',
+                items: [],
+                order: siteData.sections.length + 1
+            };
+            siteData.sections.push(newSection);
+            saveData();
+            renderApp();
+        }
+
+        function deleteSection(id) {
+            siteData.sections = siteData.sections.filter(s => s.id !== id);
+            saveData();
+            renderApp();
+        }
+
+        function updateSection(id, field, value) {
+            const section = siteData.sections.find(s => s.id === id);
+            if (section) {
+                section[field] = value;
+                saveData();
+            }
+        }
+
+        function addSectionItem(sectionId, item) {
+            const section = siteData.sections.find(s => s.id === sectionId);
+            if (section) {
+                if (!section.items) section.items = [];
+                item.id = Math.max(...section.items.map(i => i.id || 0), 0) + 1;
+                section.items.push(item);
+                saveData();
+                renderApp();
+            }
+        }
+
+        function deleteSectionItem(sectionId, itemId) {
+            const section = siteData.sections.find(s => s.id === sectionId);
+            if (section) {
+                section.items = section.items.filter(i => i.id !== itemId);
+                saveData();
+                renderApp();
+            }
+        }
+
+        function handleImageUpload(sectionId, itemId = null) {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+            input.onchange = (e) => {
+                const file = e.target.files[0];
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    if (itemId) {
+                        const section = siteData.sections.find(s => s.id === sectionId);
+                        const item = section.items.find(i => i.id === itemId);
+                        if (item) item.image = event.target.result;
+                    } else {
+                        const section = siteData.sections.find(s => s.id === sectionId);
+                        if (section) section.image = event.target.result;
+                    }
+                    saveData();
+                    renderApp();
+                };
+                reader.readAsDataURL(file);
+            };
+            input.click();
+        }
+
+        // ============ Render Functions ============
+        function renderApp() {
+            const app = document.getElementById('app');
+
+            if (isLoggedIn) {
+                app.innerHTML = renderAdminPanel();
+            } else {
+                app.innerHTML = renderPublicSite();
+            }
+        }
+
+        function renderPublicSite() {
+            return `
+                <!-- Navigation -->
+                <nav class="fixed top-0 w-full bg-slate-900/95 border-b border-slate-700 z-50">
+                    <div class="max-w-6xl mx-auto px-4 h-16 flex justify-between items-center">
+                        <div class="text-2xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
+                            ${siteData.site.siteName}
+                        </div>
+                        <button onclick="document.getElementById('loginPanel').classList.remove('hidden')" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded">
+                            🔐 مدیر
+                        </button>
+                    </div>
+                </nav>
+
+                <!-- Sections -->
+                <div class="pt-16">
+                    ${siteData.sections.sort((a, b) => a.order - b.order).map(section =>
+                        renderSection(section)
+                    ).join('')}
+                </div>
+
+                <!-- Login Panel -->
+                <div id="loginPanel" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                    <div class="bg-slate-800 p-8 rounded-lg max-w-md w-full">
+                        <h2 class="text-2xl font-bold mb-4">🔐 ورود مدیر</h2>
+                        <input
+                            type="password"
+                            id="adminPassword"
+                            placeholder="رمز را وارد کنید"
+                            class="w-full bg-slate-700 text-white p-3 rounded mb-4 border border-slate-600"
+                        />
+                        <button onclick="loginAdmin()" class="w-full bg-blue-600 hover:bg-blue-700 text-white p-3 rounded mb-2 font-bold">
+                            ورود
+                        </button>
+                        <button onclick="document.getElementById('loginPanel').classList.add('hidden')" class="w-full bg-slate-700 hover:bg-slate-600 text-white p-3 rounded">
+                            بستن
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Footer -->
+                <footer class="border-t border-slate-700 py-8 px-4 text-center text-slate-400">
+                    <p>© ۱۴۰۴ ${siteData.site.siteName}. تمام حقوق محفوظ است.</p>
+                </footer>
+            `;
+        }
+
+        function renderSection(section) {
+            switch(section.type) {
+                case 'hero':
+                    return `
+                        <section class="min-h-screen flex items-center justify-center px-4 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+                            <div class="text-center max-w-4xl">
+                                ${section.image ? `<img src="${section.image}" alt="hero" class="w-48 h-48 rounded-full mx-auto mb-8 object-cover border-4 border-blue-400">` : ''}
+                                <h1 class="text-6xl font-bold mb-6 bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
+                                    ${section.title}
+                                </h1>
+                                <p class="text-2xl text-slate-300 mb-8">${section.description}</p>
+                                <button onclick="document.getElementById('contactSection').scrollIntoView({behavior: 'smooth'})" class="bg-blue-600 hover:bg-blue-700 px-8 py-3 rounded-lg font-bold">
+                                    📧 تماس بگیرید
+                                </button>
+                            </div>
+                        </section>
+                    `;
+                case 'about':
+                    return `
+                        <section class="py-20 px-4 bg-slate-800/30">
+                            <div class="max-w-4xl mx-auto">
+                                <h2 class="text-4xl font-bold mb-8">${section.title}</h2>
+                                <p class="text-lg text-slate-300 leading-relaxed">${section.content}</p>
+                            </div>
+                        </section>
+                    `;
+                case 'projects':
+                    return `
+                        <section class="py-20 px-4">
+                            <div class="max-w-6xl mx-auto">
+                                <h2 class="text-4xl font-bold mb-12 text-center">${section.title}</h2>
+                                <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+                                    ${(section.items || []).map(item => `
+                                        <div class="bg-slate-800/50 rounded-lg overflow-hidden hover:border-blue-400 transition border border-slate-700">
+                                            ${item.image ? `<img src="${item.image}" alt="${item.title}" class="w-full h-48 object-cover">` : ''}
+                                            <div class="p-6">
+                                                <h3 class="text-xl font-bold mb-2">${item.title}</h3>
+                                                <p class="text-slate-400 mb-4">${item.description}</p>
+                                                <div class="flex gap-2 flex-wrap">
+                                                    ${(item.tags || []).map(tag => `<span class="bg-blue-600 text-xs px-3 py-1 rounded">${tag}</span>`).join('')}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        </section>
+                    `;
+                case 'gallery':
+                    return `
+                        <section class="py-20 px-4 bg-slate-800/30">
+                            <div class="max-w-6xl mx-auto">
+                                <h2 class="text-4xl font-bold mb-12 text-center">${section.title}</h2>
+                                <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                    ${(section.items || []).map(item => `
+                                        <div class="rounded-lg overflow-hidden cursor-pointer hover:scale-105 transition">
+                                            <img src="${item.image}" alt="gallery" class="w-full h-40 object-cover">
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        </section>
+                    `;
+                case 'skills':
+                    return `
+                        <section class="py-20 px-4">
+                            <div class="max-w-4xl mx-auto">
+                                <h2 class="text-4xl font-bold mb-12 text-center">${section.title}</h2>
+                                <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                    ${(section.items || []).map(skill => `
+                                        <div class="bg-slate-700/50 p-6 rounded-lg text-center hover:bg-slate-700 transition">
+                                            ⚡ ${skill}
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        </section>
+                    `;
+                case 'contact':
+                    return `
+                        <section id="contactSection" class="py-20 px-4 bg-slate-800/30">
+                            <div class="max-w-2xl mx-auto text-center">
+                                <h2 class="text-4xl font-bold mb-8">${section.title}</h2>
+                                <p class="text-lg text-slate-300 mb-12">${section.description}</p>
+                                <a href="mailto:${siteData.site.email}" class="inline-block bg-blue-600 hover:bg-blue-700 px-8 py-4 rounded-lg font-bold mb-4">
+                                    📧 ایمیل بفرستید
+                                </a>
+                                <div class="space-y-4 text-slate-300">
+                                    <p>📧 ایمیل: <strong>${siteData.site.email}</strong></p>
+                                    <p>📱 تلفن: <strong>${siteData.site.phone}</strong></p>
+                                    <p>📍 مکان: <strong>${siteData.site.location}</strong></p>
+                                </div>
+                            </div>
+                        </section>
+                    `;
+                default:
+                    return '';
+            }
+        }
+
+        function renderAdminPanel() {
+            return `
+                <div class="min-h-screen bg-slate-900">
+                    <!-- Admin Header -->
+                    <div class="bg-slate-800 border-b border-slate-700 p-6 flex justify-between items-center sticky top-0 z-40">
+                        <h1 class="text-2xl font-bold text-blue-400">📊 پانل مدیریت</h1>
+                        <button onclick="logoutAdmin()" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded font-bold">
+                            خروج
+                        </button>
+                    </div>
+
+                    <div class="max-w-6xl mx-auto p-6">
+                        <!-- Site Settings -->
+                        <div class="bg-slate-800 rounded-lg p-6 mb-6">
+                            <h2 class="text-2xl font-bold mb-6">⚙️ تنظیمات سایت</h2>
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="block text-sm mb-2">نام سایت</label>
+                                    <input
+                                        type="text"
+                                        value="${siteData.site.siteName}"
+                                        onchange="updateSiteInfo('siteName', this.value)"
+                                        class="w-full bg-slate-700 text-white p-3 rounded border border-slate-600"
+                                    />
+                                </div>
+                                <div>
+                                    <label class="block text-sm mb-2">شعار</label>
+                                    <input
+                                        type="text"
+                                        value="${siteData.site.tagline}"
+                                        onchange="updateSiteInfo('tagline', this.value)"
+                                        class="w-full bg-slate-700 text-white p-3 rounded border border-slate-600"
+                                    />
+                                </div>
+                                <div class="grid md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="block text-sm mb-2">ایمیل</label>
+                                        <input
+                                            type="email"
+                                            value="${siteData.site.email}"
+                                            onchange="updateSiteInfo('email', this.value)"
+                                            class="w-full bg-slate-700 text-white p-3 rounded border border-slate-600"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm mb-2">رمز مدیر</label>
+                                        <input
+                                            type="password"
+                                            value="${siteData.site.adminPassword}"
+                                            onchange="updateSiteInfo('adminPassword', this.value)"
+                                            class="w-full bg-slate-700 text-white p-3 rounded border border-slate-600"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Sections Management -->
+                        <div class="bg-slate-800 rounded-lg p-6">
+                            <div class="flex justify-between items-center mb-6">
+                                <h2 class="text-2xl font-bold">📑 بخش‌ها</h2>
+                                <div class="space-x-2">
+                                    <button onclick="addSection('about')" class="bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded text-sm">+ درباره</button>
+                                    <button onclick="addSection('projects')" class="bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded text-sm">+ پروژه</button>
+                                    <button onclick="addSection('gallery')" class="bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded text-sm">+ گالری</button>
+                                </div>
+                            </div>
+
+                            <div class="space-y-4">
+                                ${siteData.sections.map(section => `
+                                    <div class="bg-slate-700 p-4 rounded border border-slate-600">
+                                        <div class="flex justify-between items-start mb-4">
+                                            <h3 class="text-lg font-bold">${section.type === 'hero' ? '🏠' : section.type === 'about' ? 'ℹ️' : section.type === 'projects' ? '🚀' : section.type === 'gallery' ? '📸' : section.type === 'skills' ? '⚡' : '📧'} ${section.title}</h3>
+                                            <button onclick="deleteSection(${section.id})" class="text-red-400 hover:text-red-300">🗑️</button>
+                                        </div>
+
+                                        <div class="space-y-3">
+                                            <input
+                                                type="text"
+                                                value="${section.title}"
+                                                placeholder="عنوان بخش"
+                                                onchange="updateSection(${section.id}, 'title', this.value)"
+                                                class="w-full bg-slate-600 text-white p-2 rounded border border-slate-500 text-sm"
+                                            />
+
+                                            ${section.type !== 'projects' && section.type !== 'gallery' && section.type !== 'skills' ? `
+                                                <textarea
+                                                    placeholder="متن بخش"
+                                                    onchange="updateSection(${section.id}, 'description', this.value)"
+                                                    class="w-full bg-slate-600 text-white p-2 rounded border border-slate-500 text-sm h-24"
+                                                >${section.description || section.content || ''}</textarea>
+                                            ` : ''}
+
+                                            ${section.type === 'projects' || section.type === 'gallery' ? `
+                                                <button onclick="addSectionItem(${section.id}, {title: 'آیتم جدید', description: '', image: null})" class="w-full bg-green-600 hover:bg-green-700 p-2 rounded text-sm">
+                                                    ➕ آیتم جدید
+                                                </button>
+                                                <div class="space-y-2">
+                                                    ${(section.items || []).map(item => `
+                                                        <div class="bg-slate-800 p-3 rounded flex justify-between items-center">
+                                                            <div class="flex-1">
+                                                                <input
+                                                                    type="text"
+                                                                    value="${item.title || ''}"
+                                                                    placeholder="عنوان"
+                                                                    class="w-full bg-slate-700 text-white p-2 rounded text-sm mb-2 border border-slate-600"
+                                                                />
+                                                                ${section.type === 'projects' ? `
+                                                                    <input
+                                                                        type="text"
+                                                                        value="${item.description || ''}"
+                                                                        placeholder="توضیح"
+                                                                        class="w-full bg-slate-700 text-white p-2 rounded text-sm border border-slate-600"
+                                                                    />
+                                                                ` : ''}
+                                                            </div>
+                                                            <button onclick="handleImageUpload(${section.id}, ${item.id})" class="bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded text-sm ml-2">📷</button>
+                                                            <button onclick="deleteSectionItem(${section.id}, ${item.id})" class="text-red-400 hover:text-red-300">🗑️</button>
+                                                        </div>
+                                                    `).join('')}
+                                                </div>
+                                            ` : ''}
+
+                                            ${section.type === 'skills' ? `
+                                                <div class="space-y-2">
+                                                    ${(section.items || []).map((skill, idx) => `
+                                                        <div class="flex gap-2">
+                                                            <input
+                                                                type="text"
+                                                                value="${skill}"
+                                                                placeholder="مهارت"
+                                                                class="flex-1 bg-slate-600 text-white p-2 rounded border border-slate-500 text-sm"
+                                                            />
+                                                        </div>
+                                                    `).join('')}
+                                                    <button onclick="addSectionItem(${section.id}, 'مهارت جدید')" class="w-full bg-green-600 hover:bg-green-700 p-2 rounded text-sm">
+                                                        ➕ مهارت جدید
+                                                    </button>
+                                                </div>
+                                            ` : ''}
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+
+                        <div class="mt-8 text-center text-slate-400">
+                            💾 تمام تغییرات خودکار ذخیره می‌شوند!
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Initial render
+        renderApp();
+    </script>
+</body>
+</html>
