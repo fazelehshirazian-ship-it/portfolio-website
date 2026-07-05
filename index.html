@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UGC Portfolio Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <style id="customStyles">
+        * { direction: rtl; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { transition: background-color 0.3s, color 0.3s; }
+        .section { min-height: auto; }
+        .drag-handle { cursor: grab; }
+        .drag-handle:active { cursor: grabbing; }
+        .sortable-ghost { opacity: 0.3; }
+    </style>
+</head>
+<body id="mainBody" class="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
+    <div id="app"></div>
+
+    <script src="translations.js"></script>
+    <script src="config.js"></script>
+    <script>
+        // ============ Load Data ============
+        let siteData = JSON.parse(localStorage.getItem('ugcPortfolioData')) || JSON.parse(JSON.stringify(DEFAULT_DATA));
+        let currentLanguage = localStorage.getItem('language') || 'fa';
+        let currentTheme = JSON.parse(localStorage.getItem('theme')) || DEFAULT_THEME;
+        let isLoggedIn = false;
+
+        // Apply theme
+        function applyTheme(theme) {
+            const style = document.getElementById('customStyles');
+            const bgColor = theme.primary;
+            const textColor = theme.text;
+            const accentColor = theme.accent;
+
+            style.innerHTML += `
+                :root {
+                    --primary: ${bgColor};
+                    --accent: ${accentColor};
+                    --text: ${textColor};
+                }
+                body { background: linear-gradient(135deg, ${bgColor} 0%, ${theme.secondary} 100%); color: ${textColor}; }
+                .btn-primary { background-color: ${accentColor}; }
+                .btn-primary:hover { filter: brightness(1.1); }
+            `;
+        }
+
+        applyTheme(currentTheme);
+
+        // ============ Save Functions ============
+        function saveData() {
+            localStorage.setItem('ugcPortfolioData', JSON.stringify(siteData));
+        }
+
+        function saveTheme(theme) {
+            localStorage.setItem('theme', JSON.stringify(theme));
+            currentTheme = theme;
+            location.reload();
+        }
+
+        function saveLanguage(lang) {
+            localStorage.setItem('language', lang);
+            currentLanguage = lang;
+            renderApp();
+        }
+
+        // ============ Auth Functions ============
+        function loginAdmin(password) {
+            if (password === siteData.adminPassword) {
+                isLoggedIn = true;
+                renderApp();
+            } else {
+                alert(t('wrongPassword'));
+            }
+        }
+
+        function logoutAdmin() {
+            isLoggedIn = false;
+            renderApp();
+        }
+
+        // ============ Translation Function ============
+        function t(key) {
+            const translations = TRANSLATIONS[currentLanguage] || TRANSLATIONS.fa;
+            return translations[key] || key;
+        }
+
+        // ============ Section Management ============
+        function addSection(type) {
+            const newId = Math.max(...siteData.sections.map(s => s.id), 0) + 1;
+            const newSection = {
+                id: newId,
+                type: type,
+                title: t('newSection'),
+                content: '',
+                items: [],
+                order: siteData.sections.length + 1,
+                visible: true
+            };
+            siteData.sections.push(newSection);
+            saveData();
+            renderApp();
+        }
+
+        function deleteSection(id) {
+            if (confirm(t('confirmDelete'))) {
+                siteData.sections = siteData.sections.filter(s => s.id !== id);
+                saveData();
+                renderApp();
+            }
+        }
+
+        function updateSection(id, field, value) {
+            const section = siteData.sections.find(s => s.id === id);
+            if (section) {
+                section[field] = value;
+                saveData();
+            }
+        }
+
+        function toggleSectionVisibility(id) {
+            const section = siteData.sections.find(s => s.id === id);
+            if (section) {
+                section.visible = !section.visible;
+                saveData();
+                renderApp();
+            }
+        }
+
+        function reorderSections(newOrder) {
+            const idOrder = newOrder.map(id => parseInt(id));
+            siteData.sections.sort((a, b) => idOrder.indexOf(a.id) - idOrder.indexOf(b.id));
+            siteData.sections.forEach((s, i) => s.order = i + 1);
+            saveData();
+        }
+
+        // ============ Render Functions ============
+        function renderApp() {
+            const app = document.getElementById('app');
+
+            if (isLoggedIn) {
+                app.innerHTML = renderAdminPanel();
+                setupDragAndDrop();
+            } else {
+                app.innerHTML = renderPublicSite();
+            }
+        }
+
+        function renderPublicSite() {
+            return `
+                <!-- Navigation -->
+                <nav class="fixed top-0 w-full bg-opacity-95 border-b z-50" style="background-color: ${currentTheme.primary}; border-color: ${currentTheme.accent};">
+                    <div class="max-w-7xl mx-auto px-4 h-16 flex justify-between items-center">
+                        <div class="text-2xl font-bold" style="color: ${currentTheme.accent};">
+                            ${siteData.siteName}
+                        </div>
+                        <div class="flex gap-4 items-center">
+                            <select onchange="saveLanguage(this.value)" class="bg-opacity-50 px-3 py-1 rounded text-sm" style="background-color: ${currentTheme.accent}; color: white;">
+                                <option value="fa">فارسی</option>
+                                <option value="en">English</option>
+                                <option value="de">Deutsch</option>
+                            </select>
+                            <button onclick="document.getElementById('loginModal').classList.remove('hidden')" class="px-4 py-2 rounded font-bold" style="background-color: ${currentTheme.accent}; color: white;">
+                                🔐 ${t('admin')}
+                            </button>
+                        </div>
+                    </div>
+                </nav>
+
+                <!-- Content -->
+                <div class="pt-16">
+                    ${siteData.sections.filter(s => s.visible).sort((a, b) => a.order - b.order).map(section =>
+                        renderSectionPublic(section)
+                    ).join('')}
+                </div>
+
+                <!-- Login Modal -->
+                <div id="loginModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                    <div class="rounded-lg p-8 max-w-md w-full" style="background-color: ${currentTheme.primary};">
+                        <h2 class="text-2xl font-bold mb-4">${t('adminLogin')}</h2>
+                        <input
+                            type="password"
+                            id="adminPass"
+                            placeholder="${t('enterPassword')}"
+                            class="w-full p-3 rounded mb-4 border text-black"
+                        />
+                        <button onclick="loginAdmin(document.getElementById('adminPass').value)" class="w-full p-3 rounded font-bold text-white mb-2" style="background-color: ${currentTheme.accent};">
+                            ${t('login')}
+                        </button>
+                        <button onclick="document.getElementById('loginModal').classList.add('hidden')" class="w-full p-3 rounded text-white" style="background-color: rgba(255,255,255,0.2);">
+                            ${t('close')}
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Footer -->
+                <footer class="border-t py-8 px-4 text-center text-slate-400" style="border-color: ${currentTheme.accent};">
+                    <p>© 2024 ${siteData.siteName}. ${t('allRightsReserved')}</p>
+                </footer>
+            `;
+        }
+
+        function renderSectionPublic(section) {
+            const icons = { hero: '🏠', about: 'ℹ️', projects: '🚀', gallery: '📸', skills: '⚡', contact: '📧' };
+
+            if (section.type === 'hero') {
+                return `
+                    <section class="min-h-screen flex items-center justify-center px-4" style="background: linear-gradient(135deg, ${currentTheme.primary} 0%, ${currentTheme.secondary} 100%);">
+                        <div class="text-center max-w-4xl">
+                            <h1 class="text-6xl font-bold mb-6" style="color: ${currentTheme.accent};">${section.title}</h1>
+                            <p class="text-2xl text-slate-300 mb-8">${section.content}</p>
+                        </div>
+                    </section>
+                `;
+            } else if (section.type === 'projects') {
+                return `
+                    <section class="py-20 px-4">
+                        <div class="max-w-6xl mx-auto">
+                            <h2 class="text-4xl font-bold mb-12 text-center" style="color: ${currentTheme.accent};">${section.title}</h2>
+                            <div class="grid md:grid-cols-3 gap-8">
+                                ${(section.items || []).map(item => `
+                                    <div class="rounded-lg overflow-hidden p-6" style="background-color: rgba(100,100,100,0.3); border: 2px solid ${currentTheme.accent};">
+                                        <h3 class="text-xl font-bold mb-2">${item.title}</h3>
+                                        <p class="text-slate-300">${item.content}</p>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </section>
+                `;
+            } else if (section.type === 'skills') {
+                return `
+                    <section class="py-20 px-4" style="background-color: rgba(100,100,100,0.1);">
+                        <div class="max-w-6xl mx-auto">
+                            <h2 class="text-4xl font-bold mb-12 text-center" style="color: ${currentTheme.accent};">${section.title}</h2>
+                            <div class="grid md:grid-cols-4 gap-4">
+                                ${(section.items || []).map(skill => `
+                                    <div class="p-4 rounded-lg text-center" style="background-color: ${currentTheme.accent}; color: white;">
+                                        ${skill}
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </section>
+                `;
+            }
+
+            return `
+                <section class="py-20 px-4">
+                    <div class="max-w-4xl mx-auto">
+                        <h2 class="text-4xl font-bold mb-8" style="color: ${currentTheme.accent};">${section.title}</h2>
+                        <p class="text-lg text-slate-300">${section.content}</p>
+                    </div>
+                </section>
+            `;
+        }
+
+        function renderAdminPanel() {
+            return `
+                <div class="min-h-screen" style="background-color: ${currentTheme.primary};">
+                    <!-- Admin Header -->
+                    <div class="border-b p-6 flex justify-between items-center sticky top-0 z-40" style="background-color: ${currentTheme.secondary}; border-color: ${currentTheme.accent};">
+                        <h1 class="text-3xl font-bold" style="color: ${currentTheme.accent};">📊 ${t('adminPanel')}</h1>
+                        <button onclick="logoutAdmin()" class="px-4 py-2 rounded font-bold text-white" style="background-color: #ef4444;">
+                            ${t('logout')}
+                        </button>
+                    </div>
+
+                    <div class="max-w-7xl mx-auto p-6">
+                        <!-- Theme Settings -->
+                        <div class="rounded-lg p-6 mb-6" style="background-color: ${currentTheme.secondary};">
+                            <h2 class="text-2xl font-bold mb-6" style="color: ${currentTheme.accent};">🎨 ${t('themeSettings')}</h2>
+                            <div class="grid md:grid-cols-4 gap-4">
+                                <div>
+                                    <label class="block mb-2 text-sm">${t('primaryColor')}</label>
+                                    <input type="color" value="${currentTheme.primary}" onchange="saveTheme({...currentTheme, primary: this.value})" class="w-full h-10 rounded cursor-pointer" />
+                                </div>
+                                <div>
+                                    <label class="block mb-2 text-sm">${t('accentColor')}</label>
+                                    <input type="color" value="${currentTheme.accent}" onchange="saveTheme({...currentTheme, accent: this.value})" class="w-full h-10 rounded cursor-pointer" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Site Info -->
+                        <div class="rounded-lg p-6 mb-6" style="background-color: ${currentTheme.secondary};">
+                            <h2 class="text-2xl font-bold mb-6" style="color: ${currentTheme.accent};">ℹ️ ${t('siteInfo')}</h2>
+                            <div class="space-y-4">
+                                <input type="text" value="${siteData.siteName}" onchange="siteData.siteName = this.value; saveData();" placeholder="${t('siteName')}" class="w-full p-3 rounded border text-black" />
+                                <input type="email" value="${siteData.email}" onchange="siteData.email = this.value; saveData();" placeholder="${t('email')}" class="w-full p-3 rounded border text-black" />
+                                <input type="password" value="${siteData.adminPassword}" onchange="siteData.adminPassword = this.value; saveData();" placeholder="${t('adminPassword')}" class="w-full p-3 rounded border text-black" />
+                            </div>
+                        </div>
+
+                        <!-- Sections Management -->
+                        <div class="rounded-lg p-6" style="background-color: ${currentTheme.secondary};">
+                            <div class="flex justify-between items-center mb-6">
+                                <h2 class="text-2xl font-bold" style="color: ${currentTheme.accent};">📑 ${t('sections')}</h2>
+                                <div class="space-x-2">
+                                    <button onclick="addSection('about')" class="px-3 py-2 rounded text-sm text-white" style="background-color: ${currentTheme.accent};">+ About</button>
+                                    <button onclick="addSection('projects')" class="px-3 py-2 rounded text-sm text-white" style="background-color: ${currentTheme.accent};">+ Projects</button>
+                                    <button onclick="addSection('skills')" class="px-3 py-2 rounded text-sm text-white" style="background-color: ${currentTheme.accent};">+ Skills</button>
+                                </div>
+                            </div>
+
+                            <div id="sectionsContainer" class="space-y-4">
+                                ${siteData.sections.sort((a,b) => a.order - b.order).map(section => `
+                                    <div class="p-4 rounded drag-handle" style="background-color: rgba(100,100,100,0.3); border: 2px solid ${currentTheme.accent};" data-id="${section.id}">
+                                        <div class="flex justify-between items-start mb-4">
+                                            <h3 class="text-lg font-bold">${section.title}</h3>
+                                            <div class="space-x-2">
+                                                <button onclick="toggleSectionVisibility(${section.id})" class="text-sm px-2 py-1 rounded" style="background-color: ${section.visible ? '#10b981' : '#6b7280'}; color: white;">
+                                                    ${section.visible ? '👁️' : '🚫'}
+                                                </button>
+                                                <button onclick="deleteSection(${section.id})" class="text-red-400 hover:text-red-300">🗑️</button>
+                                            </div>
+                                        </div>
+                                        <input type="text" value="${section.title}" onchange="updateSection(${section.id}, 'title', this.value)" placeholder="${t('sectionTitle')}" class="w-full p-2 rounded border text-black text-sm mb-2" />
+                                        <textarea onchange="updateSection(${section.id}, 'content', this.value)" placeholder="${t('sectionContent')}" class="w-full p-2 rounded border text-black text-sm h-20">${section.content}</textarea>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+
+                        <div class="mt-8 text-center text-slate-400">
+                            💾 ${t('autoSave')}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function setupDragAndDrop() {
+            const container = document.getElementById('sectionsContainer');
+            if (container) {
+                Sortable.create(container, {
+                    animation: 150,
+                    ghostClass: 'sortable-ghost',
+                    onEnd: () => {
+                        const newOrder = Array.from(container.children).map(el => el.dataset.id);
+                        reorderSections(newOrder);
+                    }
+                });
+            }
+        }
+
+        // Initial render
+        renderApp();
+    </script>
+</body>
+</html>
